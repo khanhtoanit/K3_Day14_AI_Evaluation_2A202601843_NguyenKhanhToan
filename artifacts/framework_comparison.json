@@ -1,0 +1,105 @@
+{
+  "cases": {
+    "E01": "easy",
+    "E03": "easy",
+    "M02": "medium",
+    "M06": "medium",
+    "H01": "hard",
+    "H05": "hard",
+    "A01": "adversarial",
+    "A02": "adversarial"
+  },
+  "ragas": {
+    "E01": {
+      "faithfulness": 1.0,
+      "context_precision": 0.8333333332916666,
+      "context_recall": 1.0,
+      "answer_relevancy": 0.9852271933980413
+    },
+    "E03": {
+      "faithfulness": 1.0,
+      "context_precision": 0.9999999999,
+      "context_recall": 1.0,
+      "answer_relevancy": 0.9240559132653847
+    },
+    "M02": {
+      "faithfulness": 1.0,
+      "context_precision": 0.9999999999666667,
+      "context_recall": 1.0,
+      "answer_relevancy": 0.6517175259943812
+    },
+    "M06": {
+      "faithfulness": 1.0,
+      "context_precision": 0.7499999999625,
+      "context_recall": 1.0,
+      "answer_relevancy": 0.8459138158812269
+    },
+    "H01": {
+      "faithfulness": 1.0,
+      "context_precision": 0.94999999997625,
+      "context_recall": 1.0,
+      "answer_relevancy": 0.6711105379575827
+    },
+    "H05": {
+      "faithfulness": 0.8,
+      "context_precision": 0.7499999999625,
+      "context_recall": 1.0,
+      "answer_relevancy": 0.0
+    },
+    "A01": {
+      "error": "retrieved_contexts is missing. Please add retrieved_contexts to the test sample."
+    },
+    "A02": {
+      "faithfulness": 1.0,
+      "context_precision": 0.9999999999666667,
+      "context_recall": 1.0,
+      "answer_relevancy": 0.0
+    }
+  },
+  "ragas_elapsed_sec": 135.9,
+  "deepeval": {
+    "E01": {
+      "error": "RetryError[<Future at 0x11fb79690 state=finished raised TimeoutError>]"
+    },
+    "E03": {
+      "error": "RetryError[<Future at 0x11fbe0bd0 state=finished raised TimeoutError>]"
+    },
+    "M02": {
+      "faithfulness": 1.0,
+      "answer_relevancy": 1.0,
+      "context_recall": 1.0,
+      "context_precision": 1.0
+    },
+    "M06": {
+      "faithfulness": 0.6666666666666666,
+      "answer_relevancy": 1.0,
+      "context_recall": 1.0,
+      "context_precision": 0.75
+    },
+    "H01": {
+      "faithfulness": 1.0,
+      "answer_relevancy": 1.0,
+      "context_recall": 1.0,
+      "context_precision": 0.8333333333333333
+    },
+    "H05": {
+      "faithfulness": 0.8,
+      "answer_relevancy": 0.8,
+      "context_recall": 1.0,
+      "context_precision": 1.0
+    },
+    "A01": {
+      "faithfulness": 1.0,
+      "answer_relevancy": 0.0,
+      "context_recall": 0.0,
+      "context_precision": 0
+    },
+    "A02": {
+      "faithfulness": 1.0,
+      "answer_relevancy": 0.0,
+      "context_recall": 0.75,
+      "context_precision": 1.0
+    }
+  },
+  "deepeval_elapsed_sec": 468.4
+}

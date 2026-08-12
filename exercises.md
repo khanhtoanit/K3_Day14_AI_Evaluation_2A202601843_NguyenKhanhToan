@@ -316,22 +316,74 @@ verbosity bias và self-preference bằng cách nào?
 
 ### Exercise 3.4 — Framework Comparison (Bonus +10)
 
-Chỉ làm sau khi hoàn thành 3.1–3.3. Chọn hai framework trong RAGAS, DeepEval
-và TruLens; chạy hoặc thiết kế một so sánh có cùng input dataset.
+**Phương pháp:** Chạy thật (không chỉ thiết kế) RAGAS 0.4.3 và DeepEval 4.1.7
+trên cùng 8 cases lấy từ `golden_dataset.json` + `artifacts/actual_answers.json`
+(2 Easy: E01, E03 · 2 Medium: M02, M06 · 2 Hard: H01, H05 · 2 Adversarial: A01,
+A02), dùng cùng `question`, `actual_answer`, `retrieved_contexts` đã sinh sẵn
+(không gọi lại RAG, không leak expected answer vào generation). Script:
+`scripts/framework_comparison.py`, kết quả thô: `artifacts/framework_comparison.json`.
+Cả hai đều dùng model judge `gpt-4o-mini` để so sánh công bằng. Không phải file
+bắt buộc của core; script và deps (`ragas`, `deepeval`) tách riêng khỏi
+`requirements.txt`.
 
-| Tiêu chí | Framework 1: ____ | Framework 2: ____ |
+| Tiêu chí | Framework 1: RAGAS 0.4.3 | Framework 2: DeepEval 4.1.7 |
 |---|---|---|
-| Setup complexity | | |
-| Metrics available | | |
-| CI/CD integration | | |
-| Kết quả trên cùng dataset | | |
-| Insight rút ra | | |
+| Setup complexity | **Gặp lỗi thật khi cài**: `ragas.llms.base` import cứng `ChatVertexAI` từ `langchain_community`, nhưng bản `langchain-community` mà pip chọn (0.4.2) đã bỏ submodule đó → `ModuleNotFoundError`. Phải ghim ngược cả stack `langchain-core/langchain-openai/langchain-community<1.0` mới import được. Kéo theo ~60 packages (langgraph, huggingface_hub, pandas, pyarrow...) | Cài sạch, không lỗi, không cần hạ cấp gì. ~40 packages, không kéo theo hệ sinh thái langchain/huggingface. API rõ ràng hơn (`LLMTestCase` + `metric.measure(test_case)`) |
+| Metrics available | Faithfulness, ContextPrecision(with reference), ContextRecall, AnswerRelevancy (embedding-based synthetic-question similarity), và nhiều biến thể khác (AnswerCorrectness, FactualCorrectness, Rubrics...). Không có "Completeness vs expected_answer" tương đương trực tiếp | FaithfulnessMetric, AnswerRelevancyMetric, ContextualRecallMetric, ContextualPrecisionMetric — cùng 4 khái niệm, khác cách chấm (nhiều bước sub-LLM-call: extract → verify → verdict). Cũng không có Completeness sẵn; muốn có phải tự viết `GEval` |
+| CI/CD integration | Thiết kế cho batch/dataframe (`evaluate()` trên HF `Dataset`), hợp với notebook/offline batch job hơn là gate từng PR; muốn nhúng vào pytest phải tự viết glue code | Pytest-native thật sự (`assert_test`, `deepeval test run`) — khớp thẳng với mô hình "eval as quality gate" của lab, không cần glue |
+| Kết quả trên cùng dataset | Avg (7/8 case hợp lệ, A01 lỗi cứng): Faithfulness **0.971**, Context Recall **1.000**, Context Precision **0.898**, Answer Relevancy **0.583**. Runtime: **135.9s** cho 8 case × 4 metric (async, chạy song song trong từng case) | Avg (6/8 case hợp lệ, E01/E03 timeout): Faithfulness **0.911**, Context Recall **0.792**, Context Precision **0.764**, Answer Relevancy **0.633**. Runtime: **468.4s** — chậm hơn ~3.4× vì mỗi `measure()` chạy đồng bộ, tuần tự nhiều sub-call LLM |
+| Insight rút ra | Faithfulness/Context Recall của RAGAS gần như luôn ≈1.0 dù case đó bị core evaluator của lab chấm fail (H01: RAGAS relevancy 0.671, vẫn > ngưỡng 0.5) → LLM judge khoan dung với paraphrase nhưng **bỏ sót off-topic drift** mà word-overlap heuristic bắt được | 2/8 case (E01, E03) bị `RetryError`/`TimeoutError` dù cùng điều kiện mạng mà RAGAS chạy trót lọt — cho thấy default retry/timeout của DeepEval "mỏng" hơn khi số lượng sub-call LLM tăng theo mỗi metric |
 
-- Scores có nhất quán không?
-- Framework nào strict hơn và vì sao?
-- Hai framework có tìm ra cùng failure cases không?
+**Phát hiện đáng chú ý nhất — RAGAS crash trên case A01:** A01 (câu hỏi
+out-of-scope "recommend divorce lawyer") có `retrieved_contexts = []` vì
+retriever đúng nghĩa không tìm thấy gì liên quan. `Faithfulness`/`ContextRecall`
+của RAGAS **raise `ValueError`** khi `retrieved_contexts` rỗng thay vì trả về
+0.0, nên toàn bộ case bị loại khỏi kết quả. DeepEval và evaluator tự viết
+trong `template.py` đều xử lý rỗng một cách graceful (trả 0.0). Với một
+CI/CD gate, một evaluator crash trên input hợp lệ (retrieval rỗng là kịch bản
+thật, không phải lỗi) là một liability — cần bọc try/except quanh RAGAS nếu
+dùng trong pipeline tự động.
 
-> *Phân tích:*
+**Scores có nhất quán không?**
+
+> Không hoàn toàn. Trên retrieval metrics (Context Recall/Precision) cả ba
+> evaluator (custom, RAGAS, DeepEval) khá gần nhau vì đây là phép đo cơ học,
+> ít mơ hồ ngữ nghĩa. Nhưng Faithfulness lệch rất lớn: custom (word-overlap)
+> cho trung bình ~0.56 trên 5 case chung (M02, M06, H01, H05, A02), trong khi
+> RAGAS cho ~0.96 và DeepEval ~0.89 — vì LLM judge công nhận paraphrase đúng ý
+> là "grounded" còn word-overlap phạt nặng việc đổi từ. Answer Relevancy còn
+> lệch giữa chính hai LLM framework với nhau: RAGAS cho H05 = 0.0 (dựa trên độ
+> tương đồng embedding giữa câu hỏi gốc và câu hỏi tổng hợp ngược từ answer,
+> nhạy với answer ngắn/từ chối) trong khi DeepEval cho H05 = 0.8 (LLM judge
+> trực tiếp đánh giá theo tiêu chí khác). Cùng tên metric, cùng input, hai
+> con số khác hẳn nhau — bài học chính của exercise này.
+
+**Framework nào strict hơn và vì sao?**
+
+> Không có framework nào strict hơn "toàn diện" — mỗi framework strict trên
+> một trục khác nhau. RAGAS strict về mặt **vận hành** (crash cứng khi input
+> rỗng thay vì suy biến an toàn) nhưng lỏng tay về mặt **điểm số** Faithfulness
+> (gần như luôn cho ~1.0). DeepEval lỏng tay hơn về vận hành (không crash) và
+> punish nhẹ hơn tổng thể (context recall trung bình 0.792 thấp hơn RAGAS
+> 1.000 — do cách LLM judge của DeepEval phân rã statement rồi match từng câu
+> khắt khe hơn cho A02 và H01). Nếu chỉ nhìn overall trung bình, custom
+> evaluator của lab là "khó tính" nhất vì dùng ngưỡng cứng
+> `all(score >= 0.5)` thay vì trung bình — đây là lý do H01 bị lab's core
+> đánh fail (relevance 0.478 < 0.5) trong khi cả RAGAS (0.671) lẫn DeepEval
+> (1.000) đều sẽ pass nếu áp cùng ngưỡng 0.5 lên relevancy của họ.
+
+**Hai framework có tìm ra cùng failure cases không?**
+
+> Một phần. Cả ba evaluator đồng thuận A02 (prompt injection) là failure rõ
+> ràng: custom relevance 0.231, RAGAS relevancy 0.0, DeepEval relevancy 0.0 —
+> tín hiệu mạnh và nhất quán. Nhưng **H01 (off-topic drift ở case Hard) chỉ bị
+> lab's custom evaluator bắt được** (relevance 0.478 < ngưỡng 0.5); nếu áp
+> ngưỡng 0.5 đơn giản lên Answer Relevancy của RAGAS (0.671) hoặc DeepEval
+> (1.000) thì cả hai framework "chuẩn" đều bỏ sót lỗi này. Điều này cho thấy
+> heuristic word-overlap tuy thô nhưng lại nhạy với việc answer "trôi" khỏi
+> đúng câu hỏi hơn là LLM judge — một lý do thực tế để không thay hoàn toàn
+> heuristic bằng LLM-as-judge mà nên dùng cả hai làm tín hiệu bổ sung cho
+> nhau, đặc biệt khi threshold quyết định pass/fail trong CI/CD.
 
 ### Exercise 3.5 — Retrieval Reranking (Bonus +5)
 
@@ -389,4 +441,7 @@ Hoàn thành kiểm tra cuối trong khoảng 11:50–12:00.
 - [x] `reflection.md` có ba failure analyses và regression strategy.
 - [x] Đã copy `template.py` thành `solution/solution.py`.
 - [x] Exercise 3.5 (bonus reranking) đã hoàn thành.
-- [ ] Exercise 3.4 (framework comparison) — bỏ qua (bonus +10, cần cài RAGAS/DeepEval/TruLens ngoài scope).
+- [x] Exercise 3.4 (framework comparison) — đã chạy thật RAGAS + DeepEval trên
+      8 case chung (`scripts/framework_comparison.py`,
+      `artifacts/framework_comparison.json`); không phải core deliverable,
+      deps cài riêng ngoài `requirements.txt`.
